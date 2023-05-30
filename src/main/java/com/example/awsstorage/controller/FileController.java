@@ -24,6 +24,10 @@ public class FileController {
     @Autowired
     private S3FileService s3Service;
 
+    public void setS3Service(S3FileService s3Service) {
+        this.s3Service = s3Service;
+    }
+
     @PostMapping("/upload")
     public String upload(@RequestParam("file") MultipartFile file, @RequestParam("userName") String userName) {
         return s3Service.saveFile(file, userName);

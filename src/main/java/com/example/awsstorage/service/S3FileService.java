@@ -36,7 +36,10 @@ public class S3FileService implements IFileService {
     public S3FileService(S3Client s3) {
         this.s3 = s3;
     }
-    
+    // Setter method for bucketName
+    public void setBucketName(String bucketName) {
+        this.bucketName = bucketName;
+    }
 
     @Override
     public String saveFile(MultipartFile file, String userName) {
@@ -58,8 +61,6 @@ public class S3FileService implements IFileService {
         }
         return null;
     }
-    
-
     @Override
     public byte[] downloadFile(String userName, String filename) {
         String key = userName + "/" + filename;
@@ -72,10 +73,13 @@ public class S3FileService implements IFileService {
                 .build();
         try (ResponseInputStream<GetObjectResponse> response = s3.getObject(request)) {
             return response.readAllBytes();
+        } catch (NoSuchKeyException e) {
+            throw new RuntimeException(e);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
+
 
 
     @Override
@@ -91,13 +95,18 @@ public class S3FileService implements IFileService {
         try {
             s3.deleteObject(request);
             return true;
+        } catch (NoSuchKeyException e) {
+            return false;
         } catch (SdkException e) {
             throw e;
         }
     }
+
+   
+
+
     
-    
-    private boolean doesFileExist(String key) {
+    public boolean doesFileExist(String key) {
         try {
             HeadObjectRequest request = HeadObjectRequest.builder()
                     .bucket(bucketName)
