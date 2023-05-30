@@ -2,22 +2,28 @@ package com.example.awsstorage.service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.amazonaws.services.s3.model.ListObjectsV2Result;
-import com.amazonaws.services.s3.model.ObjectMetadata;
-import com.amazonaws.services.s3.model.S3Object;
-import com.amazonaws.services.s3.model.S3ObjectInputStream;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
-import com.amazonaws.util.IOUtils;
+
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 @Service
 public class S3FileService implements IFileService {
@@ -25,11 +31,12 @@ public class S3FileService implements IFileService {
     @Value("${bucketName}")
     private String bucketName;
 
-    private final AmazonS3 s3;
+    private final S3Client s3;
 
-    public S3FileService(AmazonS3 s3) {
+    public S3FileService(S3Client s3) {
         this.s3 = s3;
     }
+    
 
     @Override
     public String saveFile(MultipartFile file, String userName) {
@@ -39,15 +46,19 @@ public class S3FileService implements IFileService {
         int maxTries = 3;
         try {
             InputStream inputStream = file.getInputStream();
-            ObjectMetadata metadata = new ObjectMetadata();
-            metadata.setContentLength(file.getSize());
-            s3.putObject(bucketName, key, inputStream, metadata);
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .metadata(Collections.singletonMap("Content-Length", String.valueOf(file.getSize())))
+                    .build();
+            s3.putObject(request, RequestBody.fromInputStream(inputStream, file.getSize()));
             return "File uploaded";
         } catch (IOException e) {
             if (++count == maxTries) throw new RuntimeException(e);
         }
         return null;
     }
+    
 
     @Override
     public byte[] downloadFile(String userName, String filename) {
@@ -55,14 +66,17 @@ public class S3FileService implements IFileService {
         if (!doesFileExist(key)) {
             throw new RuntimeException("File not found");
         }
-        S3Object object = s3.getObject(bucketName, key);
-        S3ObjectInputStream objectContent = object.getObjectContent();
-        try {
-            return IOUtils.toByteArray(objectContent);
+        GetObjectRequest request = GetObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
+        try (ResponseInputStream<GetObjectResponse> response = s3.getObject(request)) {
+            return response.readAllBytes();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
+
 
     @Override
     public boolean deleteFile(String userName, String filename) {
@@ -70,35 +84,47 @@ public class S3FileService implements IFileService {
         if (!doesFileExist(key)) {
             return false;
         }
+        DeleteObjectRequest request = DeleteObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
         try {
-            s3.deleteObject(bucketName, key);
+            s3.deleteObject(request);
             return true;
-        } catch (AmazonS3Exception e) {
+        } catch (SdkException e) {
             throw e;
         }
     }
     
+    
     private boolean doesFileExist(String key) {
         try {
-            s3.getObjectMetadata(bucketName, key);
+            HeadObjectRequest request = HeadObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .build();
+            s3.headObject(request);
             return true;
-        } catch (AmazonS3Exception e) {
-            if (e.getStatusCode() == HttpStatus.NOT_FOUND.value()) {
-                return false;
-            } else {
-                throw e;
-            }
+        } catch (NoSuchKeyException e) {
+            return false;
+        } catch (SdkException e) {
+            throw e;
         }
     }
+    
     
     @Override
     public List<String> listAllFiles(String userName) {
         String prefix = userName + "/";
-        ListObjectsV2Result listObjectsV2Result = s3.listObjectsV2(bucketName, prefix);
-        return listObjectsV2Result.getObjectSummaries()
-                .stream()
-                .map(S3ObjectSummary::getKey)
+        ListObjectsV2Request request = ListObjectsV2Request.builder()
+                .bucket(bucketName)
+                .prefix(prefix)
+                .build();
+        ListObjectsV2Response response = s3.listObjectsV2(request);
+        return response.contents().stream()
+                .map(S3Object::key)
                 .collect(Collectors.toList());
     }
+    
 
 }
