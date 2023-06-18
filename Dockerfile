@@ -5,8 +5,7 @@ FROM openjdk:8-jdk-alpine
 WORKDIR /app
 
 # Copy the executable JAR file and the configuration files to the container
-COPY target/awsstorage-0.0.1-SNAPSHOT.jar /app
-COPY config/application.properties /app/config/
+COPY build/libs/awsstorage-0.0.1-SNAPSHOT.jar /app
 
 # Expose the port that the Spring Boot application listens on
 EXPOSE 8080
