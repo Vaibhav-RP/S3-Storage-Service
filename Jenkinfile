@@ -10,12 +10,21 @@ pipeline {
                 sh 'gradle clean build'
             }
         }
-    }
-    stage('Build Docker image') {
+        stage('Build Docker image') {
             steps {
                 script {
-                    sh 'docker build -t javatechie/devops-integration .'
+                    sh ' docker build -t vaibhavrp/awsstorageimage .'
                 }
             }
+        }
+        stage('Push image to Hub') {
+            steps {
+                withCredentials([string(credentialsId: 'dockerhub', variable: 'dockerhubpwd')]) {
+                    sh "docker login -u vaibhavrp -p ${dockerhubpwd}"
+                }
+                sh 'docker push vaibhavrp/awsstorageimage'
+            }
+        }
     }
+    
 }
