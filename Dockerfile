@@ -8,7 +8,7 @@ WORKDIR /app
 COPY build/libs/awsstorage-0.0.1-SNAPSHOT.jar /app
 
 # Expose the port that the Spring Boot application listens on
-EXPOSE 8080
+EXPOSE 8081
 
 # Set the entrypoint command to run the Spring Boot application
 ENTRYPOINT ["java", "-jar", "/app/awsstorage-0.0.1-SNAPSHOT.jar"]
